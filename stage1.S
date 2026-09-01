@@ -1,6 +1,8 @@
 bits 16
 org 0x7c00
 
+%include "stage2_sectors.inc"
+
 start:
     cli
 
