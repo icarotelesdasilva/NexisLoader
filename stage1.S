@@ -1,7 +1,6 @@
 bits 16
 org 0x7c00
 
-%include "stage2_sectors.inc"
 
 start:
     cli
@@ -19,7 +18,7 @@ start:
     xor bx, bx
 
     mov ah, 0x02
-    mov al, 4
+    mov al, 17
     mov ch, 0
     mov cl, 2
     mov dh, 0
