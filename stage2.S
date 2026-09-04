@@ -1,4 +1,3 @@
-
 bits 16
 
 global stage2
@@ -10,17 +9,84 @@ stage2:
     mov ax, 0x1000
     mov ds, ax
 
+
+    mov ah, 0x00
+    mov al, 0x03
+    int 0x10
+
+
+
     mov si, nexisloader_msg - stage2
 
-   .print:
+.print_loader:
     lodsb
+    test al, al
+    jz .select_position
+
+    mov ah, 0x0E
+    int 0x10
+
+    jmp .print_loader
+
+
+
+.select_position:
+
+    mov ax, 0xB800
+    mov es, ax
+
+    mov di, 0x0140
+
+    mov si, select_msg - stage2
+
+
+
+.print_select:
+    lodsb
+
+    test al, al
+    jz .wait_key
+
+    mov es:[di], al
+
+    inc di
+    mov byte es:[di], 0x01
+
+    inc di
+
+    jmp .print_select
+
+
+
+.wait_key:
+    mov ah, 0x00
+    int 0x16
+
+    cmp al, 0x0D
+    jne .wait_key
+
+
+
+    mov ah, 0x00
+    mov al, 0x03
+    int 0x10
+
+
+
+    mov si, loading_msg - stage2
+
+.print_loading:
+    lodsb
+
     test al, al
     jz .fim
 
     mov ah, 0x0E
     int 0x10
 
-    jmp .print
+    jmp .print_loading
+
+
 
 .fim:
     lgdt [gdt_descriptor - stage2]
@@ -45,6 +111,7 @@ protected_mode:
 
     mov esp, 0x00090000
 
+
     call NexisLoader
 
 
@@ -52,6 +119,7 @@ halt:
     cli
     hlt
     jmp halt
+
 
 
 align 4
@@ -84,7 +152,12 @@ gdt_descriptor:
     dd gdt_start
 
 
+
 nexisloader_msg:
-    db "NexisLoaders", 0
+    db "NexisLoader Menu:", 0
 
+select_msg:
+    db "> NexisK", 0
 
+loading_msg:
+    db "Loading NexisK...", 0

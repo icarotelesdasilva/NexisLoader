@@ -4,6 +4,9 @@ extern void vga_clear(void);
 void NexisLoader(void)
 {
 
+vga_clear();
+vga_print("NexisK Loader on");
+
     for (;;)
     {
     }
