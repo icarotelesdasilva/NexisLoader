@@ -1,3 +1,4 @@
+
 bits 16
 
 global stage2
@@ -9,13 +10,20 @@ stage2:
     mov ax, 0x1000
     mov ds, ax
 
+    mov si, nexisloader_msg - stage2
+
+    lodsb
+    mov ah, 0x0E
+    int 0x10
+
     lgdt [gdt_descriptor - stage2]
-        
+
     mov eax, cr0
     or eax, 0x00000001
     mov cr0, eax
 
     jmp dword 0x08:protected_mode
+
 
 bits 32
 
@@ -31,6 +39,7 @@ protected_mode:
     mov esp, 0x00090000
 
     call NexisLoader
+
 
 halt:
     cli
@@ -66,3 +75,8 @@ gdt_end:
 gdt_descriptor:
     dw gdt_end - gdt_start - 1
     dd gdt_start
+
+
+nexisloader_msg:
+    db "NexisLoaders", 0
+
