@@ -12,10 +12,17 @@ stage2:
 
     mov si, nexisloader_msg - stage2
 
+   .print:
     lodsb
+    test al, al
+    jz .fim
+
     mov ah, 0x0E
     int 0x10
 
+    jmp .print
+
+.fim:
     lgdt [gdt_descriptor - stage2]
 
     mov eax, cr0
@@ -79,4 +86,5 @@ gdt_descriptor:
 
 nexisloader_msg:
     db "NexisLoaders", 0
+
 
