@@ -33,7 +33,7 @@ Implemented
 * [x]	Interactive boot menu
 * [x]	ENTER key handling
 * [x]	Global Descriptor Table (GDT)
-* [x]	Real Mode → Protected Mode transition
+* [x]	Real Mode to Protected Mode transition
 * [x]	32-bit Protected Mode
 * [x]	Basic 32-bit execution environment
 
@@ -79,7 +79,7 @@ The current boot flow is:
           Enable Protected Mode
                      |
                      v
-              Far Jump
+                  Far Jump
                      |
                      v
           32-bit Protected Mode
@@ -96,7 +96,7 @@ Boot Menu
 
 NexisLoader currently includes a minimal text-based boot menu.
 
-The menu currently serves as both a basic user interface and a development mechanism.
+The menu serves as both a basic user interface and a development mechanism.
 
 Future versions may use the menu for:
 
@@ -178,7 +178,7 @@ The intended process is:
               Read Kernel
                    |
                    v
-          
+           Validate Kernel
                    |
                    v
           Transfer Execution
@@ -218,7 +218,6 @@ However, NexisLoader is not dependent on NexisK.
 
 The bootloader is intended to remain an independent project capable of loading compatible test or experimental kernels.
 
-
 Development Philosophy
 
 NexisLoader is designed around low-level development and direct understanding of the boot process.
@@ -247,7 +246,7 @@ The exact toolchain may evolve, but development is primarily focused on:
 * Real Mode
 * Protected Mode
 * x86 hardware interfaces
-* GDT
+* Global Descriptor Table (GDT)
 * Disk I/O
 * Memory management
 * x86_64 Long Mode
@@ -294,7 +293,7 @@ Debug builds should make it possible to identify failures during each individual
 
 Roadmap
 
-Phase 1 — Boot Foundation
+Phase 1: Boot Foundation
 
 * [x]	Boot sector
 * [x]	Real Mode
@@ -307,7 +306,7 @@ Phase 1 — Boot Foundation
 * [x]	Protected Mode
 * [x]	32-bit execution
 
-Phase 2 — Kernel Loader
+Phase 2: Kernel Loader
 
 * [ ]	Second-stage loader
 * [ ]	Disk access
@@ -317,7 +316,7 @@ Phase 2 — Kernel Loader
 * [ ]	Kernel entry point
 * [ ]	Kernel handoff
 
-Phase 3 — Boot Protocol
+Phase 3: Boot Protocol
 
 * [ ]	Boot information structure
 * [ ]	Memory map
@@ -326,7 +325,7 @@ Phase 3 — Boot Protocol
 * [ ]	Defined boot ABI
 * [ ]	Stable loader/kernel interface
 
-Phase 4 — 64-bit
+Phase 4: 64-bit
 
 16-bit
   |
@@ -347,7 +346,7 @@ Planned work:
 * [ ]	64-bit execution
 * [ ]	x86_64 kernel loading
 
-Phase 5 — Nexis Integration
+Phase 5: Nexis Integration
 
 * [ ]	Define NexisLoader/NexisK interface
 * [ ]	Define kernel format
@@ -367,7 +366,7 @@ Every source file may contain a project identification header:
 ;
 ; Copyright (c) 2026 icarotelesdasilva
 ; Licensed under the MIT License
-; 
+;
 
 The project name is intentionally kept visible throughout the source code and boot environment.
 
@@ -377,7 +376,7 @@ License
 
 NexisLoader is released under the MIT License.
 
-Copyright (c) 2026 [AUTHOR NAME]
+Copyright (c) 2026 icarotelesdasilva
 
 See LICENSE for the complete license text.
 
