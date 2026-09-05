@@ -42,7 +42,7 @@ NexisLoader is currently in its initial development stage.
 
 The current implementation starts through the BIOS boot process, executes in 16-bit Real Mode, provides a basic interactive menu, handles keyboard input, detects the BIOS memory map through E820, stores the returned memory regions, initializes a Global Descriptor Table, and transitions into 32-bit Protected Mode.
 
-The detected E820 memory map is now successfully made available to the kernel, allowing the kernel to enumerate the physical memory regions reported by the BIOS.
+The detected E820 memory map is stored in physical memory and made accessible to the kernel environment. The current implementation also transfers the number of detected entries through the Protected Mode boot path.
 
 Kernel loading and a stable bootloader/kernel interface are still under development.
 
@@ -64,7 +64,9 @@ Kernel loading and a stable bootloader/kernel interface are still under developm
 * [x] Basic 32-bit execution environment
 * [x] BIOS E820 memory map detection
 * [x] E820 memory region collection
-* [x] Memory map delivery to the kernel
+* [x] E820 map storage
+* [x] E820 entry counting
+* [x] Memory map made available to the kernel environment
 
 ### In Development
 
@@ -76,6 +78,7 @@ Kernel loading and a stable bootloader/kernel interface are still under developm
 * [ ] Kernel entry-point handling
 * [ ] Boot information structure
 * [ ] Stable memory map structure
+* [ ] Stable memory map pointer ABI
 * [ ] Filesystem support
 * [ ] ELF kernel support
 * [ ] 64-bit Long Mode
@@ -109,7 +112,7 @@ The current boot flow is:
               Memory Map
                      |
                      v
-            Pass Map to Kernel
+          Store Map in Memory
                      |
                      v
                    GDT
@@ -164,6 +167,7 @@ Current responsibilities include:
 * Boot menu
 * E820 memory map detection
 * E820 entry collection
+* E820 map storage
 * GDT preparation
 
 The 16-bit stage is intentionally kept small.
@@ -174,51 +178,398 @@ NexisLoader uses the BIOS `INT 15h, E820h` interface to detect the system's phys
 
 The loader requests the available memory regions from the BIOS and stores the returned E820 entries in memory.
 
-The collected entries are then made available to the kernel.
+The collected entries are then made accessible to the kernel environment.
 
-Conceptually:
+### E820 Collection
+
+The E820 request is performed through the BIOS interrupt interface:
 
 ```text
-BIOS
- |
- | INT 15h / E820h
- v
-+----------------------+
-| Memory Map Entry 0   |
-+----------------------+
-| Memory Map Entry 1   |
-+----------------------+
-| Memory Map Entry 2   |
-+----------------------+
-| ...                  |
-+----------------------+
-          |
-          v
-       Kernel
+INT 15h
+EAX = 0xE820
+EDX = "SMAP"
+ECX = 24
 ```
 
-A working E820 implementation allows the kernel to receive information about the physical memory layout reported by the firmware.
+The BIOS returns one memory region per successful call.
 
-A typical result contains entries describing:
+The bootloader continues requesting entries until the BIOS indicates that there are no more regions.
 
-* Base address
-* Region size
-* Memory type
+For every valid entry, NexisLoader stores the returned structure and advances to the next destination address.
+
+### Current Memory Layout
+
+The current implementation uses a predefined physical memory area for the E820 data.
+
+The memory map begins at:
+
+```text
+0x00050000
+```
+
+The number of collected entries is stored at:
+
+```text
+0x00057000
+```
+
+The current layout is therefore:
+
+```text
+Physical Address
+
+0x00050000
+    |
+    +-- E820 Entry 0   (24 bytes)
+    |
+    +-- E820 Entry 1   (24 bytes)
+    |
+    +-- E820 Entry 2   (24 bytes)
+    |
+    +-- ...
+    |
+    +-- E820 Entry N
+    |
+    v
+0x00057000
+    |
+    +-- E820 entry count
+```
+
+Each E820 entry occupies 24 bytes.
+
+Therefore the address of an entry can be calculated as:
+
+```text
+entry_address = 0x00050000 + (index * 24)
+```
 
 For example:
 
 ```text
-Base: 0x0000000000000000 | Size: 0x000000000009FC00 | Type: 0x00000001
-Base: 0x000000000009FC00 | Size: 0x0000000000000400 | Type: 0x00000002
-Base: 0x00000000000F0000 | Size: 0x0000000000010000 | Type: 0x00000002
-Base: 0x0000000000100000 | Size: 0x0000000007EE0000 | Type: 0x00000001
-Base: 0x0000000007FE0000 | Size: 0x0000000000020000 | Type: 0x00000002
-Base: 0x00000000FFFC0000 | Size: 0x0000000000040000 | Type: 0x00000002
+Entry 0 = 0x00050000
+Entry 1 = 0x00050018
+Entry 2 = 0x00050030
+Entry 3 = 0x00050048
 ```
 
-The current implementation establishes the memory-discovery foundation required for future physical memory management and boot information structures.
+### E820 Entry Format
 
-A formal and stable memory map ABI is still planned.
+NexisLoader requests the extended 24-byte E820 structure.
+
+The layout is:
+
+```text
+Offset  Size    Field
+------  ------  ----------------
+0x00    8       Base Address
+0x08    8       Region Length
+0x10    4       Memory Type
+0x14    4       Extended Attributes
+```
+
+Conceptually:
+
+```text
++------------------------------+  +0x00
+| Base Address (64-bit)        |
++------------------------------+  +0x08
+| Region Length (64-bit)       |
++------------------------------+  +0x10
+| Memory Type (32-bit)         |
++------------------------------+  +0x14
+| Extended Attributes (32-bit) |
++------------------------------+  +0x18
+```
+
+The next entry begins immediately after the previous 24-byte entry.
+
+### Memory Types
+
+The `Type` field describes the purpose of the corresponding physical memory region.
+
+The most important value is:
+
+```text
+0x00000001 = Usable RAM
+```
+
+Other values describe memory that should not be treated as ordinary available RAM, such as reserved or firmware-owned regions.
+
+The kernel must therefore **not assume that all physical memory is usable**.
+
+It must inspect the E820 entries and determine which regions can safely be used.
+
+### Example E820 Map
+
+A BIOS may return entries such as:
+
+```text
+Base: 0x0000000000000000
+Size: 0x000000000009FC00
+Type: 0x00000001
+
+Base: 0x000000000009FC00
+Size: 0x0000000000000400
+Type: 0x00000002
+
+Base: 0x0000000000100000
+Size: 0x0000000007EE0000
+Type: 0x00000001
+```
+
+The kernel can interpret these as:
+
+```text
+0x00000000 - 0x0009FBFF
+    Usable RAM
+
+0x0009FC00 - 0x0009FFFF
+    Reserved
+
+0x00100000 - ...
+    Usable RAM
+```
+
+The exact memory layout is machine-dependent.
+
+The kernel must use the E820 map instead of assuming a fixed amount of available RAM.
+
+## Receiving the Memory Map
+
+The bootloader and kernel communicate through memory prepared by NexisLoader.
+
+The current E820 map is stored at:
+
+```text
+0x00050000
+```
+
+The number of entries is stored at:
+
+```text
+0x00057000
+```
+
+The kernel therefore needs two pieces of information:
+
+```text
+Memory map:
+    0x00050000
+
+Entry count:
+    value stored at 0x00057000
+```
+
+Conceptually, the kernel can interpret the map as an array of E820 entries:
+
+```text
+E820Entry *memory_map = (E820Entry *)0x00050000;
+```
+
+and the number of entries as the value stored by the bootloader at the count location.
+
+The important distinction is that the bootloader does not calculate which memory is usable.
+
+It reports the physical memory layout returned by the BIOS.
+
+The kernel is responsible for interpreting that information.
+
+## Current Kernel Handoff
+
+The current Protected Mode transition retrieves the number of E820 entries and places that value on the stack before entering the C boot entry point.
+
+The current flow is:
+
+```text
+             BIOS
+               |
+               v
+          INT 15h E820
+               |
+               v
+      Collect E820 entries
+               |
+               v
+       Store entries at
+          0x00050000
+               |
+               v
+       Store entry count at
+          0x00057000
+               |
+               v
+       Enter Protected Mode
+               |
+               v
+       Push entry count
+               |
+               v
+         C entry point
+```
+
+This means that the current implementation explicitly transfers the **number of E820 entries** through the boot path.
+
+The actual E820 array remains at its predefined physical address.
+
+Therefore, the current implementation should be considered a **working development interface**, not a finalized boot ABI.
+
+## How the Kernel Should Consume the Map
+
+The kernel-side memory initialization should conceptually perform the following operations:
+
+```text
+1. Obtain the number of E820 entries.
+
+2. Treat 0x00050000 as the beginning
+   of the E820 entry array.
+
+3. Iterate through each 24-byte entry.
+
+4. Read:
+      Base Address
+      Region Length
+      Memory Type
+      Extended Attributes
+
+5. Identify regions with:
+      Type = 0x00000001
+
+6. Exclude reserved and unavailable
+   regions from the physical memory allocator.
+
+7. Preserve the memory occupied by
+   bootloader data until it is no longer needed.
+```
+
+Conceptually:
+
+```text
+E820 map
+   |
+   v
++-----------------------+
+| Entry 0               |
+| Base                  |
+| Length                |
+| Type                  |
+| Attributes            |
++-----------------------+
+| Entry 1               |
+| Base                  |
+| Length                |
+| Type                  |
+| Attributes            |
++-----------------------+
+| Entry N               |
++-----------------------+
+          |
+          v
+      Kernel PMM
+          |
+          v
+  Physical memory regions
+```
+
+The kernel's physical memory manager can then construct its own representation of usable physical memory from this information.
+
+## Bootloader Memory Ownership
+
+The E820 map occupies physical memory reserved by the bootloader during the boot process.
+
+The kernel must not immediately treat this area as free RAM.
+
+The kernel should first consume or copy the E820 information it needs.
+
+Only after the information has been preserved and the bootloader's memory requirements are accounted for should the physical memory manager consider reclaiming those regions.
+
+This is important because a physical memory map describes the machine's memory, but it does not automatically describe memory currently occupied by the bootloader itself.
+
+The kernel must account for both:
+
+```text
+BIOS-reported memory regions
++
+Bootloader/kernel reserved memory
+```
+
+when constructing the physical memory allocator.
+
+## Recommended Future Boot Interface
+
+The current fixed-address mechanism works for development, but it is not an ideal permanent interface.
+
+A stable boot protocol should explicitly provide the kernel with a boot information structure.
+
+For example:
+
+```text
+BootInfo
+|
++-- memory_map
+|      |
+|      +-- pointer to E820 entries
+|
++-- memory_map_count
+|
++-- other boot information
+```
+
+Conceptually:
+
+```text
+NexisLoader
+      |
+      | prepares BootInfo
+      v
++---------------------------+
+| BootInfo                  |
+|                           |
+| memory_map  -> 0x50000    |
+| map_count   -> N           |
++---------------------------+
+             |
+             v
+           Kernel
+```
+
+The kernel would then receive one defined structure instead of depending on hard-coded addresses.
+
+This structure may eventually contain:
+
+* E820 memory map
+* E820 entry count
+* Kernel location
+* Bootloader information
+* Video information
+* Boot parameters
+* Command-line arguments
+* Hardware information
+* Other firmware-provided information
+
+The exact structure will be defined when the NexisLoader/NexisK boot ABI is formalized.
+
+## Current Memory Map Status
+
+The E820 subsystem currently provides:
+
+* BIOS E820 detection
+* E820 enumeration
+* 24-byte E820 entry storage
+* Entry counting
+* E820 map storage at `0x00050000`
+* Entry count storage at `0x00057000`
+* Protected Mode transition
+* Entry count transfer to the C boot entry point
+* Kernel-visible access to the stored E820 data
+
+The following are **not yet finalized**:
+
+* Stable `BootInfo` structure
+* Stable memory map pointer ABI
+* Stable bootloader/kernel calling convention
+* Formal boot ABI
+* Complete ownership rules for every bootloader memory region
 
 ## 16-bit to 32-bit Transition
 
@@ -230,13 +581,19 @@ The transition can be summarized as:
 16-bit Real Mode
        |
        v
+Initialize environment
+       |
+       v
+Detect E820 memory
+       |
+       v
+Store memory map
+       |
+       v
 Prepare GDT
        |
        v
 Load GDT
-       |
-       v
-Detect Memory
        |
        v
 Enable Protected Mode
@@ -248,7 +605,7 @@ Far Jump
 32-bit Protected Mode
 ```
 
-The 32-bit environment will serve as the foundation for the kernel-loading implementation.
+The 32-bit environment serves as the foundation for the kernel-loading implementation.
 
 ## Global Descriptor Table
 
@@ -359,7 +716,7 @@ The exact toolchain may evolve, but development is primarily focused on:
 * x86 hardware interfaces
 * Global Descriptor Table (GDT)
 * BIOS disk services
-* Memory map discovery
+* E820 memory map discovery
 * Kernel loading
 * x86_64 Long Mode
 
@@ -403,7 +760,8 @@ Useful areas to inspect include:
 * Stage 2 execution
 * GDT initialization
 * E820 memory detection
-* Memory map collection
+* E820 entry collection
+* E820 memory map storage
 * Memory map delivery
 * Protected Mode entry
 * Disk operations
@@ -429,7 +787,9 @@ Debug builds should make it possible to identify failures during each individual
 * [x] 32-bit execution
 * [x] E820 memory map detection
 * [x] E820 memory region collection
-* [x] Memory map delivery to kernel
+* [x] E820 map storage
+* [x] Entry counting
+* [x] Memory map made available to kernel environment
 
 ### Phase 2: Kernel Loader
 
@@ -444,7 +804,8 @@ Debug builds should make it possible to identify failures during each individual
 ### Phase 3: Boot Protocol
 
 * [ ] Boot information structure
-* [x] Basic memory map delivery
+* [x] Basic E820 memory map availability
+* [ ] Stable memory map pointer
 * [ ] Stable memory map structure
 * [ ] Hardware information
 * [ ] Kernel parameters
@@ -546,7 +907,9 @@ NexisLoader should not currently be considered production-ready boot software.
 | Kernel           | Independent           |
 | NexisK           | Separate Project      |
 | Memory Detection | BIOS E820             |
-| Memory Delivery  | Kernel-visible        |
+| Map Location     | `0x00050000`          |
+| Count Location   | `0x00057000`          |
+| Entry Size       | 24 bytes              |
 
 ## Contributing
 
