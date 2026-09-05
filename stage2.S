@@ -1,3 +1,12 @@
+;
+; NexisLoader
+; Handcrafted x86 Kernel Bootloader
+;
+; Independent project within the Nexis ecosystem
+;
+; Copyright (c) 2026 icarotelesdasilva
+; Licensed under the MIT License
+
 bits 16
 
 global stage2
