@@ -40,7 +40,9 @@ NexisLoader is developed independently from NexisK while remaining part of the b
 
 NexisLoader is currently in its initial development stage.
 
-The current implementation starts through the BIOS boot process, executes in 16-bit Real Mode, provides a basic interactive menu, handles keyboard input, detects the BIOS memory map through E820, initializes a Global Descriptor Table, and transitions into 32-bit Protected Mode.
+The current implementation starts through the BIOS boot process, executes in 16-bit Real Mode, provides a basic interactive menu, handles keyboard input, detects the BIOS memory map through E820, stores the returned memory regions, initializes a Global Descriptor Table, and transitions into 32-bit Protected Mode.
+
+The detected E820 memory map is now successfully made available to the kernel, allowing the kernel to enumerate the physical memory regions reported by the BIOS.
 
 Kernel loading and a stable bootloader/kernel interface are still under development.
 
@@ -61,6 +63,8 @@ Kernel loading and a stable bootloader/kernel interface are still under developm
 * [x] 32-bit Protected Mode
 * [x] Basic 32-bit execution environment
 * [x] BIOS E820 memory map detection
+* [x] E820 memory region collection
+* [x] Memory map delivery to the kernel
 
 ### In Development
 
@@ -71,7 +75,7 @@ Kernel loading and a stable bootloader/kernel interface are still under developm
 * [ ] Kernel validation
 * [ ] Kernel entry-point handling
 * [ ] Boot information structure
-* [ ] Memory map handoff
+* [ ] Stable memory map structure
 * [ ] Filesystem support
 * [ ] ELF kernel support
 * [ ] 64-bit Long Mode
@@ -103,6 +107,9 @@ The current boot flow is:
                      |
                      v
               Memory Map
+                     |
+                     v
+            Pass Map to Kernel
                      |
                      v
                    GDT
@@ -155,7 +162,8 @@ Current responsibilities include:
 * Text output
 * Keyboard input
 * Boot menu
-* Memory map detection
+* E820 memory map detection
+* E820 entry collection
 * GDT preparation
 
 The 16-bit stage is intentionally kept small.
@@ -164,7 +172,9 @@ The 16-bit stage is intentionally kept small.
 
 NexisLoader uses the BIOS `INT 15h, E820h` interface to detect the system's physical memory map.
 
-The loader requests the available memory regions from the BIOS and stores the returned E820 entries in memory for use during later boot stages.
+The loader requests the available memory regions from the BIOS and stores the returned E820 entries in memory.
+
+The collected entries are then made available to the kernel.
 
 Conceptually:
 
@@ -182,11 +192,33 @@ BIOS
 +----------------------+
 | ...                  |
 +----------------------+
+          |
+          v
+       Kernel
 ```
 
-The current implementation establishes the memory-discovery foundation required for a future boot information structure.
+A working E820 implementation allows the kernel to receive information about the physical memory layout reported by the firmware.
 
-The memory map is not yet exposed through a stable bootloader/kernel ABI.
+A typical result contains entries describing:
+
+* Base address
+* Region size
+* Memory type
+
+For example:
+
+```text
+Base: 0x0000000000000000 | Size: 0x000000000009FC00 | Type: 0x00000001
+Base: 0x000000000009FC00 | Size: 0x0000000000000400 | Type: 0x00000002
+Base: 0x00000000000F0000 | Size: 0x0000000000010000 | Type: 0x00000002
+Base: 0x0000000000100000 | Size: 0x0000000007EE0000 | Type: 0x00000001
+Base: 0x0000000007FE0000 | Size: 0x0000000000020000 | Type: 0x00000002
+Base: 0x00000000FFFC0000 | Size: 0x0000000000040000 | Type: 0x00000002
+```
+
+The current implementation establishes the memory-discovery foundation required for future physical memory management and boot information structures.
+
+A formal and stable memory map ABI is still planned.
 
 ## 16-bit to 32-bit Transition
 
@@ -202,6 +234,9 @@ Prepare GDT
        |
        v
 Load GDT
+       |
+       v
+Detect Memory
        |
        v
 Enable Protected Mode
@@ -362,12 +397,14 @@ make run
 
 Low-level debugging is an important part of the project.
 
-Future development may include dedicated debugging configurations for:
+Useful areas to inspect include:
 
 * Boot-sector execution
 * Stage 2 execution
 * GDT initialization
 * E820 memory detection
+* Memory map collection
+* Memory map delivery
 * Protected Mode entry
 * Disk operations
 * Kernel loading
@@ -391,6 +428,8 @@ Debug builds should make it possible to identify failures during each individual
 * [x] Protected Mode
 * [x] 32-bit execution
 * [x] E820 memory map detection
+* [x] E820 memory region collection
+* [x] Memory map delivery to kernel
 
 ### Phase 2: Kernel Loader
 
@@ -405,7 +444,8 @@ Debug builds should make it possible to identify failures during each individual
 ### Phase 3: Boot Protocol
 
 * [ ] Boot information structure
-* [ ] Memory map handoff
+* [x] Basic memory map delivery
+* [ ] Stable memory map structure
 * [ ] Hardware information
 * [ ] Kernel parameters
 * [ ] Defined boot ABI
@@ -439,7 +479,8 @@ Planned work:
 * [ ] Define NexisLoader/NexisK interface
 * [ ] Define kernel format
 * [ ] Define boot information ABI
-* [ ] Test NexisK loading
+* [x] Initial NexisK memory map integration
+* [ ] Test complete NexisK loading
 * [ ] Optional NexisK integration
 
 ## Source Code Identification
@@ -505,6 +546,7 @@ NexisLoader should not currently be considered production-ready boot software.
 | Kernel           | Independent           |
 | NexisK           | Separate Project      |
 | Memory Detection | BIOS E820             |
+| Memory Delivery  | Kernel-visible        |
 
 ## Contributing
 
