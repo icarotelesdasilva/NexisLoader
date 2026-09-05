@@ -1,10 +1,12 @@
 /*
- 
- * NexisLoader bootloader 
- * Copyright (C) 2026 Ícaro Teles da Silva Ribeiro
- * Author: @icarotelesdasilva
- 
- */
+ NexisLoader
+ Handcrafted x86 Kernel Bootloader
+
+ Independent project within the Nexis ecosystem
+
+Copyright (c) 2026 icarotelesdasilva
+Licensed under the MIT License
+*/
 
 char *vga  = (char*)0xB8000;
 int coluna = 0;
